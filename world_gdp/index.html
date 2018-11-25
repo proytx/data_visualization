@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="http://d3js.org/d3.v3.min.js"></script>
+    <style>
+      circle {
+        fill: orange;
+        opacity: 0.7;
+      }
+
+      rect {
+        //fill: orange;
+        opacity: 0.7;
+      }
+
+      h2 {
+        text-align: center;
+        font-family: sans-serif;
+        color: black;
+      }
+
+      div.years_buttons {
+        position: fixed;
+        top: 5px;
+        left: 50px;
+      }
+
+
+      div.years_buttons div {
+        background-color: rgb(251, 201, 127);
+        padding: 5px;
+        margin: 7px;
+        font-family: Arial, sans-serif;
+        border-radius: 5px;
+      }
+      
+      div.stack_button {
+        position: fixed;
+        top: 5px;
+        left: 125px;
+        background-color: rgb(251, 201, 127);
+        padding: 5px;
+        margin: 7px;
+        font-family: Arial, sans-serif;
+        border-radius: 5px;
+      }
+    </style>
+    <script type="text/javascript">
+      /**
+      * draw() function draws the world map from geoJSON data, then nests tsv plotting function
+      * @param {JSON} geo_data [longitude, latitude] of countries of the world
+      * @returns nothing, purely for side effects to draw map
+      */
+      function draw(geo_data) {
+        "use strict";
+        var margin = 75,
+            width = 1400 - margin,
+            height = 600 - margin;
+        
+        d3.select("body")
+          .append("h2")
+          .text("World GDP select countries last 2000 years - 1AD");
+
+        var svg = d3.select("body")
+            .append("svg")
+            .attr("width", width + margin)
+            .attr("height", height + margin)
+            .append('g')
+            .attr('class', 'map');
+
+        /*
+        // code that was written before path.bounds() was discvered
+        var min_max = function(feat_geom) {
+          if (feat_geom.type == 'Polygon') {
+            return {
+              'min_x': d3.min(feat_geom.coordinates[0], function(xy){return xy[0];}),
+              'max_x': d3.max(feat_geom.coordinates[0], function(xy){return xy[0];}),
+              'min_y': d3.min(feat_geom.coordinates[0], function(xy){return xy[1];}),
+              'max_y': d3.max(feat_geom.coordinates[0], function(xy){return xy[1];})
+            };
+          } else if (feat_geom.type == 'MultiPolygon') {
+            var arrMinX = feat_geom.coordinates.map(function(poly, i) {
+              return d3.min(poly[0], function(xy){return xy[0];})
+            });
+            var arrMaxX = feat_geom.coordinates.map(function(poly, i) {
+              return d3.max(poly[0], function(xy){return xy[0];})
+            });
+             var arrMinY = feat_geom.coordinates.map(function(poly, i) {
+              return d3.min(poly[0], function(xy){return xy[1];})
+            });
+             var arrMaxY = feat_geom.coordinates.map(function(poly, i) {
+              return d3.min(poly[0], function(xy){return xy[1];})
+            });
+            return {
+              'min_x': d3.min(arrMinX),
+              'max_x': d3.max(arrMaxX),
+              'min_y': d3.min(arrMinY),
+              'max_y': d3.max(arrMaxY)
+            };
+           }
+        };
+        
+        // for each country in geo_data, extract min, max x and y's, and store by country ID
+        var country_extents = geo_data.features.reduce(function(obj, feat){
+          // some countries are too new to have an id, instead it is set to -99
+          if (feat.id === '-99') obj[feat.properties.name] = min_max(feat.geometry);
+          else obj[feat.id] = min_max(feat.geometry);
+          return obj;
+        },{});
+        // code that was written before path.bounds() was discvered
+        */
+        
+        var years = [1,1000,1500,1600,1700,1820,1870,1913,1950,1973,2001];
+
+        var projection = d3.geo.mercator()
+                               .scale(140)
+                               .translate([width / 2, height / 1.2]);
+
+        var path = d3.geo.path().projection(projection);
+
+        /*var centroids = geo_data.features.map(function (feature){
+          return path.centroid(feature);
+        });*/
+        // above code copied from https://bl.ocks.org/curran/55d327542393530662c3
+        // however, improved on it to create object which gives O(1) access to bounds and centroids
+        var bounds = geo_data.features.reduce(function (obj, feature){
+          if (feature.id === '-99') obj[feature.properties.name] = path.bounds(feature);
+          else obj[feature.id] = path.bounds(feature);
+          return obj;
+        },{});
+        
+        var centroids = geo_data.features.reduce(function (obj, feature){
+          if (feature.id === '-99') obj[feature.properties.name] = path.centroid(feature);
+          else obj[feature.id] = path.centroid(feature);
+          return obj;
+        },{});
+        
+        
+        var map = svg.selectAll('path')
+                     .data(geo_data.features)
+                     .enter()
+                     .append('path')
+                     .attr('d', path)
+                     .style('fill', 'lightBlue')
+                     .style('stroke', 'white')
+                     .style('stroke-width', 0.5);
+
+        function plot_points(gdp_data) {
+            // console.log(bounds);
+            var region_map = {
+                                'Total_12_Country': bounds['FIN'][1],
+                                'Other': bounds['LBN'][1],
+                                'Total_Western_Europe': bounds['SYR'][1],
+                                'Eastern_Europe': bounds['TUR'][1],
+                                'Other_Western_Offshoots': bounds['NZL'][0],
+                                'Total_Western_Offshoots': bounds['NZL'][1],
+                                'Other_Latin_America': bounds['GTM'][1],
+                                'Total_Latin_America': bounds['ECU'][1],
+                                'Other_Asia': bounds['JPN'][1],
+                                'Total_Asia_(excluding_Japan)': bounds['AUS'][1],
+                                'Africa': bounds['SEN'][0],
+                                'Total_World': bounds['RUS'][0]
+              };
+              
+            var circ_pos = gdp_data.map(function(row, row_idx){
+              var id = row['id'];
+              var region = row['Country'];
+              return (centroids.hasOwnProperty(id)) ? (centroids[id]): (region_map[region]);
+            });
+          
+            // based on actual plots, Norway and USA(Alaska skews centroid) positions were in wrong places
+            circ_pos[8] = [circ_pos[8][0] + 10, circ_pos[8][1] + 30];
+            circ_pos[19] = [circ_pos[19][0] + 5, circ_pos[19][1] + 30];
+            // Spain and France can be moved left and right resply to reduce clutter
+            circ_pos[14] = [circ_pos[14][0] - 5, circ_pos[14][1] + 3];
+            circ_pos[4] = [circ_pos[4][0] + 5, circ_pos[4][1]];
+            // shift Belgium to the left a bit
+            circ_pos[1] = [circ_pos[1][0] - 2, circ_pos[1][1]];
+            // shift Germany, Italy, Austria right a bit
+            circ_pos[5] = [circ_pos[5][0] + 3, circ_pos[5][1]];
+            circ_pos[6] = [circ_pos[6][0] + 3, circ_pos[6][1]];
+            circ_pos[0] = [circ_pos[0][0] + 3, circ_pos[0][1]];
+          
+            var yr_gdp = gdp_data.map(function(row, row_idx){
+              
+              /*
+              // this block coupled with max_min in outer function provided the location
+              // of circles prior to discovery of path.centroids() and path.bounds()
+              var coords = function(d) {
+                if (country_extents.hasOwnProperty(d['id'])) {
+                  var min_x = country_extents[d['id']]['min_x'];
+                  var min_y = country_extents[d['id']]['min_y'];
+                  var max_x = country_extents[d['id']]['max_x'];
+                  var max_y = country_extents[d['id']]['max_y'];
+                  return [projection([min_x, min_y]), projection([max_x, max_y])];
+                } else return [[0,0]];
+              };
+              
+              var center_x = d3.mean(coords(d), function(xy) {
+                    return xy[0];
+              });
+              
+              var center_y = d3.mean(coords(d), function(xy) {
+                    return xy[1];
+              });
+              */
+              
+              // adding + in front converts numeric string to number
+              return {
+                'isCountry': centroids.hasOwnProperty(row['id']),
+                'country': row['Country'],
+                'gdp': +row[1],
+                'x': circ_pos[row_idx][0],
+                'y': circ_pos[row_idx][1]
+              }
+            });
+
+            /*
+            var gdp_max = d3.max(yr_gdp, function(d) {
+                return d['gdp'];
+            });*/
+
+            var gdp_max = gdp_data[31][2001];
+            // NOTE: arbitrarily decided to apply compression factors, so visually seems to be increasing GDP
+            var bar_comp = [50.0, 50.0, 30.0, 30.0, 30.0, 17.0, 12.0, 6.0, 4.0, 1.75, 1.0];
+            // console.log(gdp_max);
+
+            // the area of the circle should be proportional to the quantity being plotted
+            // hence sqrt scale for radius
+            var radius = d3.scale.sqrt()
+                           .domain([0, gdp_max/10.0])
+                           .range([0, 15]);
+
+            var bar_height = d3.scale.linear()
+                           .domain([0, gdp_max/bar_comp[0]])
+                           .range([0, 525]);
+          
+            // colour scale used in stacked bar chart for sorted countries
+            var colour_c20 = d3.scale.category20();
+          
+            svg.append('g')
+               .attr("class", "bubble")
+               .selectAll("circle")
+               .data(yr_gdp)
+               .enter()
+               .append("circle")
+               .attr('cx', function(d) { return d['x']; })
+               .attr('cy', function(d) { return d['y']; })
+               .attr('r', function(d){return (d['isCountry']) ? (4) : (0);})
+               .append('title')
+               .text(function(d) {
+                  return d['country'] + '\n' + ((d['gdp'] > 0) ? ('$' + d['gdp'] + 'M(1990)'):('no data'));
+                });
+
+            svg.append('g')
+               .selectAll("rect")
+               .data(yr_gdp)
+               .enter()
+               .append("rect")
+               .attr('x', function(d) { return d['x']; })
+               .attr('y', function(d) {
+                    return 525 - bar_height(d['gdp']);
+               })
+               .attr('height', function(d) {
+                    return bar_height(d['gdp']);
+               })
+               .attr('width', function(d){return (d['isCountry']) ? (2) : (5);})
+               .attr('fill', function(d){return (d['isCountry']) ? ('black') : ('gray');})
+               .attr('class', function(d){return (d['isCountry']) ? ('country') : ('region');})
+               .append('title')
+               .text(function(d) {
+                  return d['country'] + '\n' + ((d['gdp'] > 0) ? ('$' + d['gdp'] + 'M(1990)'):('no data'));
+                });
+
+
+          /**
+           * update() function updates the gdp data for each year during animation.
+           * @param {number} year from tsv column names
+           * @returns nothing, purely for side effects to update data for that year
+           */
+          function update(year, compression) {
+            bar_height = d3.scale.linear()
+                           .domain([0, gdp_max/compression])
+                           .range([0, 525]);
+            
+            var yr_gdp = gdp_data.map(function(row, row_idx){
+              // adding + in front converts numeric string to number
+              return {
+                'isCountry': centroids.hasOwnProperty(row['id']),
+                'country': row['Country'],
+                'gdp': +row[year],
+                'x': circ_pos[row_idx][0],
+                'y': circ_pos[row_idx][1]
+              }
+            });
+
+            
+            d3.select("h2")
+                .text("World GDP select countries last 2000 years - " + year + "AD");
+            // console.log(year);console.log(yr_gdp);
+            var circles = svg.selectAll('circle')
+                               .data(yr_gdp)
+                               .transition()
+                               .duration(500)
+                               .attr('cx', function(d) { return d['x']; })
+                               .attr('cy', function(d) { return d['y']; })
+                               .attr('r', function(d){return (d['isCountry']) ? (4) : (0);})
+                               .select('title')
+                               .text(function(d) {
+                                  return d['country'] + '\n' + ((d['gdp'] > 0) ? ('$' + d['gdp'] + 'M(1990)'):('no data'));
+                                });
+
+
+            /* 
+            // Since exact same data circles are updated every time, no need for exit or enter
+            circles.exit().remove();
+
+            circles.enter()
+                     .append("circle")
+                     .transition()
+                     .duration(500)
+                     .attr('cx', function(d) { return d['x']; })
+                     .attr('cy', function(d) { return d['y']; })
+                     .attr('r', function(d) {
+                        return radius(d['gdp']);
+                     });
+          */
+            var rects = svg.selectAll('rect')
+                               .data(yr_gdp)
+                               .transition()
+                               .duration(500)
+                               .attr('x', function(d) { return d['x']; })
+                               .attr('y', function(d) {
+                                  return 525 - bar_height(d['gdp']);
+                                })
+                               .attr('height', function(d) {
+                                  return bar_height(d['gdp']);
+                                })
+                               .attr('width', function(d){return (d['isCountry']) ? (2) : (5);})
+                               .attr('fill', function(d){return (d['isCountry']) ? ('black') : ('gray');})
+                               .attr('class', function(d){return (d['isCountry']) ? ('country') : ('region');})
+                               .select('title')
+                               .text(function(d) {
+                                  return d['country'] + '\n' + ((d['gdp'] > 0) ? ('$' + d['gdp'] + 'M(1990)'):('no data'));
+                                });
+
+
+
+          }
+          
+          /**
+           * stack() function moves bars already in the graph one on top of the other.
+           * @returns nothing, purely for side effects to update bar graph to stacked 
+           */
+          function stack() {
+            // ascending sort bars representing countries by gdp using Array.prototype.sort
+            // surprisingly, gdp attribute could directly be compared instead of bar heights
+            var rects = (svg.selectAll('rect.country')).sort(function(a, b) { 
+              return d3.ascending(a['gdp'], b['gdp']);
+            });
+            
+            // once sorted, the array heights are cumulatively added to get starting positions and heights
+            // NOTE: extra level to go down because svg selections return an array(1) inside which selected elems are
+            var stacked_pos = rects[0].reduce(function(arr_obj, rect) {
+              var pos_prev = arr_obj[arr_obj.length - 1]['y'];
+              var height = +rect.getAttribute('height');
+              arr_obj.push({y: (pos_prev + height), h: height}); 
+              return arr_obj;
+            }, [{y: 0.0, h: 0.0}]); 
+            stacked_pos.shift();
+            
+            rects.transition().duration(500)
+                              .attr('x', function(d) { return region_map['Total_World'][0] + 5; })
+                              .attr('y', function(d, i) { return 525 - stacked_pos[i]['y']; })
+                              .attr('width', 20);
+                              //.style('fill', function(d, i){ return colour_c20(i);});
+          }
+          
+          var year_idx = 0;
+
+          // the animation for displaying plots for each individual year and then buttons 
+          // for subsequent interactive exploration orchestrated within anonymous function in setInterval
+          var year_interval = setInterval(function() {
+            //clearInterval(year_interval);
+            //return;
+            update(years[year_idx], bar_comp[year_idx]);
+
+            year_idx++;
+
+            if(year_idx >= years.length) {
+                clearInterval(year_interval);
+
+                var buttons = d3.select("body")
+                        .append("div")
+                        .attr("class", "years_buttons")
+                        .selectAll("div")
+                        .data(years)
+                        .enter()
+                        .append("div")
+                        .text(function(d) {
+                            return d;
+                        });
+
+                var stack_button = d3.select("body")
+                        .append("div")
+                        .attr("class", "stack_button")
+                        .text("sort countries");
+              
+                buttons.on("click", function(d) {
+                    d3.select(".years_buttons")
+                      .selectAll("div")
+                      .transition()
+                      .duration(500)
+                      .style("color", "black")
+                      .style("background", "rgb(251, 201, 127)");
+
+                    d3.select(".stack_button")
+                      .style("disabled", false)
+                      .style("color", "black")
+                      .style("background", "rgb(251, 201, 127)");
+                              
+                    d3.select(this)
+                      .transition()
+                      .duration(500)
+                      .style("background", "lightBlue")
+                      .style("color", "white");
+                  
+                    update(d, bar_comp[years.indexOf(d)]); 
+                });
+              
+                stack_button.on("click", function(d) {
+                    d3.select(this)
+                      .transition()
+                      .duration(500)
+                      .style("background", "lightBlue")
+                      .style("color", "white")
+                      .style("disabled", true)
+                  
+                    stack();
+                });              
+            }
+          }, 1000);
+      }
+
+      var format = d3.time.format("%d-%m-%Y (%H:%M h)");
+
+      d3.tsv("world_gdp_1_2001AD.tsv", function(d) {
+        return d;
+      }, plot_points);
+        
+      /*d3.queue()
+        .defer(d3.tsv, "world_pop_1_2001AD.tsv")
+        .defer(d3.tsv, "world_gdp_1_2001AD.tsv")
+        .defer(d3.tsv, "world_ppp_1_2001AD.tsv")
+        .await(combineData);*/
+    };
+    </script>
+  </head>
+<body>
+  <script type="text/javascript">
+  /*
+    Use D3 to load the GeoJSON file
+    */
+    
+d3.json("world_countries.json", draw);
+  </script>
+</body>
+</html>
